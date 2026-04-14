@@ -1,12 +1,15 @@
 # Videre
 
+> *From Latin — "to see."*
+> Because security doesn't start with tools. It starts with learning to see what was always there.
+
 A Security Literacy platform built for the cybersecurity society at our department designed to give members (and anyone else, really) the foundational mental model they need before diving into CTFs, bug bounties, or security research.
  
 ---
  
 ## What This Is
  
-Most security learning platforms drop you into challenges and assume you already know how to think. This one takes a step back. It's structured around four learning tracks that build intuition first — how systems expose themselves, what encoding and encryption actually mean, where to look on a web application, and how to read code for red flags.
+Most security learning platforms drop you into challenges and assume you already know how to think. This one takes a step back. It's structured to build intuition first: how systems expose themselves, what encoding and encryption actually mean, where to look on a web application, and how to read code for red flags.
  
 The goal isn't to produce CTF grinders. It's to produce people who notice things.
  
