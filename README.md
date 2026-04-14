@@ -1,4 +1,5 @@
 # Videre
+> *pronounced: vee-deh-reh*
 
 > *From Latin — "to see."*
 > Because security doesn't start with tools. It starts with learning to see what was always there.
