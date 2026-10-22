@@ -20,16 +20,57 @@
 export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 export const PROXY_ENDPOINT = '/.netlify/functions/ask';
 
-/** Fast model with the most generous free-tier limits — safe default. */
-export const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant';
+/** Fast model with generous free-tier limits — replacement for the retired
+ *  llama-3.1-8b-instant (see RETIRED_GROQ_MODELS below). */
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
 
-/** Suggested ids for the model picker; Groq renames models occasionally. */
+/** Suggested ids for the model picker — verified against console.groq.com/docs
+ *  (deprecations page) as of Oct 2026. Groq retires models aggressively; check
+ *  console.groq.com/docs/deprecations when a 404 "model not found" appears. */
 export const GROQ_MODEL_SUGGESTIONS = [
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.8-27b'
+];
+
+/** Model ids Groq has shut down (console.groq.com/docs/deprecations) — any of
+ *  these (e.g. saved in a visitor's localStorage before the retirement) is
+ *  silently swapped for the current default instead of 404ing forever. */
+const RETIRED_GROQ_MODELS = new Set([
   'llama-3.1-8b-instant',
   'llama-3.3-70b-versatile',
-  'openai/gpt-oss-120b',
-  'qwen/qwen3-32b'
-];
+  'qwen/qwen3-32b',
+  'qwen/qwen3.6-27b',
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'moonshotai/kimi-k2-instruct',
+  'moonshotai/kimi-k2-instruct-0905',
+  'groq/compound',
+  'groq/compound-mini'
+]);
+
+/** Trim, default, and de-retire a model id. */
+export const normalizeModel = (model: string | undefined): string => {
+  const trimmed = (model ?? '').trim();
+  if (!trimmed || RETIRED_GROQ_MODELS.has(trimmed)) return DEFAULT_GROQ_MODEL;
+  return trimmed;
+};
+
+/** Reasoning models answer after an internal "thinking" phase that consumes
+ *  completion tokens — keep it short and out of the visible answer. */
+const reasoningTuning = (model: string): Record<string, unknown> =>
+  model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low', include_reasoning: false } : {};
+
+const chatBody = (model: string, system: string, user: string, maxTokens: number) => ({
+  model,
+  temperature: 0.5, // GPT-OSS behaves best in the 0.5–0.7 band
+  max_completion_tokens: maxTokens, // current param name (max_tokens is legacy)
+  ...reasoningTuning(model),
+  messages: [
+    { role: 'system', content: system },
+    { role: 'user', content: user }
+  ]
+});
 
 export type GroqErrorKind =
   | 'auth'
@@ -83,7 +124,7 @@ const askViaProxy = async ({
   model,
   system,
   user,
-  maxTokens = 500,
+  maxTokens = 800,
   signal
 }: AskGroqOptions): Promise<ProxyResult> => {
   let response: Response;
@@ -122,7 +163,7 @@ const askViaProxy = async ({
   };
 };
 
-const askDirect = async ({ apiKey, model, system, user, maxTokens = 500, signal }: AskGroqOptions): Promise<string> => {
+const askDirect = async ({ apiKey, model, system, user, maxTokens = 800, signal }: AskGroqOptions): Promise<string> => {
   if (!apiKey?.trim()) {
     throw new GroqError('auth', 'No API key set — add your Groq key first.');
   }
@@ -136,15 +177,7 @@ const askDirect = async ({ apiKey, model, system, user, maxTokens = 500, signal 
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey.trim()}`
       },
-      body: JSON.stringify({
-        model: model.trim() || DEFAULT_GROQ_MODEL,
-        temperature: 0.4,
-        max_tokens: maxTokens,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user }
-        ]
-      })
+      body: JSON.stringify(chatBody(normalizeModel(model), system, user, maxTokens))
     });
   } catch (e) {
     if ((e as Error)?.name === 'AbortError') throw e;
@@ -176,7 +209,11 @@ const askDirect = async ({ apiKey, model, system, user, maxTokens = 500, signal 
 
 /** Ask through the proxy when available, else directly with a client key. */
 export async function askGroq(options: AskGroqOptions): Promise<string> {
-  const proxied = await askViaProxy(options);
+  // Normalize once up front: trims, defaults empty, and swaps retired ids
+  // (saved in old localStorage configs) for the current default model.
+  const normalized: AskGroqOptions = { ...options, model: normalizeModel(options.model) };
+
+  const proxied = await askViaProxy(normalized);
   if (proxied.kind === 'ok') return proxied.content;
 
   if (proxied.kind === 'error' && !proxied.serverUnconfigured) {
@@ -186,7 +223,7 @@ export async function askGroq(options: AskGroqOptions): Promise<string> {
   }
 
   // Proxy absent, or present-but-unconfigured: direct mode needs a client key.
-  if (options.apiKey?.trim()) return askDirect(options);
+  if (normalized.apiKey?.trim()) return askDirect(normalized);
 
   if (proxied.kind === 'error') throw proxied.error; // unconfigured-server message
   throw new GroqError(

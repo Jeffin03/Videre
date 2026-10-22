@@ -2,7 +2,7 @@ import React from 'react';
 import { Lesson, Track } from '../../types';
 import { getPathForTrack } from '../../data/paths';
 import { renderExplanationMarkdown } from '../../utils/markdown';
-import { askGroq, GroqError, DEFAULT_GROQ_MODEL, GROQ_MODEL_SUGGESTIONS } from '../../utils/groq';
+import { askGroq, GroqError, DEFAULT_GROQ_MODEL, GROQ_MODEL_SUGGESTIONS, normalizeModel } from '../../utils/groq';
 import { Sparkles, X, Send, Loader2, KeyRound, Settings2, AlertTriangle, RotateCcw } from 'lucide-react';
 
 interface AskVidereProps {
@@ -21,7 +21,7 @@ const STORAGE_KEY = 'videre_groq_config';
 
 const readEnv = (): GroqConfig => ({
   apiKey: (import.meta.env.VITE_GROQ_API_KEY as string | undefined) || '',
-  model: (import.meta.env.VITE_GROQ_MODEL as string | undefined) || DEFAULT_GROQ_MODEL
+  model: normalizeModel((import.meta.env.VITE_GROQ_MODEL as string | undefined) || DEFAULT_GROQ_MODEL)
 });
 
 const loadConfig = (): GroqConfig => {
@@ -32,7 +32,9 @@ const loadConfig = (): GroqConfig => {
       const parsed = JSON.parse(raw) as Partial<GroqConfig>;
       return {
         apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : env.apiKey,
-        model: typeof parsed.model === 'string' && parsed.model ? parsed.model : env.model
+        // normalizeModel swaps retired ids (saved before a Groq deprecation)
+        // for the current default, so the panel shows the effective model.
+        model: typeof parsed.model === 'string' && parsed.model ? normalizeModel(parsed.model) : env.model
       };
     }
   } catch {

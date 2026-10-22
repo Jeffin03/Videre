@@ -18,11 +18,20 @@
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
+// Replacement for Groq's retired llama-3.1-8b-instant. Groq retires models
+// aggressively (console.groq.com/docs/deprecations) — when a 404 "model not
+// found" appears, update this default and GROQ_MODEL_SUGGESTIONS in
+// src/utils/groq.ts together.
+const DEFAULT_MODEL = 'openai/gpt-oss-20b';
+
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 15;
 const MAX_USER_CHARS = 1500;
 const MAX_SYSTEM_CHARS = 6000;
-const MAX_TOKENS_CAP = 700;
+// GPT-OSS models "think" before answering and spend completion tokens on it —
+// headroom so the visible answer isn't squeezed out by reasoning.
+const MAX_TOKENS_CAP = 1200;
+const DEFAULT_TOKENS = 800;
 const MODEL_PATTERN = /^[\w./:-]{1,80}$/;
 
 /** ip -> { count, resetAt } — best-effort, per warm function instance */
@@ -86,7 +95,7 @@ export const handler = async (event) => {
     return json(400, { error: 'Invalid JSON body.', kind: 'bad-request' });
   }
 
-  const model = typeof payload.model === 'string' ? payload.model.trim() : '';
+  const model = (typeof payload.model === 'string' && payload.model.trim()) || DEFAULT_MODEL;
   const system = typeof payload.system === 'string' ? payload.system : '';
   const user = typeof payload.user === 'string' ? payload.user.trim() : '';
   const requestedTokens = Number(payload.max_tokens);
@@ -109,7 +118,13 @@ export const handler = async (event) => {
     });
   }
 
-  const maxTokens = Math.min(MAX_TOKENS_CAP, Math.max(50, Math.floor(requestedTokens) || 500));
+  const maxTokens = Math.min(MAX_TOKENS_CAP, Math.max(50, Math.floor(requestedTokens) || DEFAULT_TOKENS));
+
+  // GPT-OSS models are reasoning models: keep the thinking short and out of
+  // the visible answer (reasoning tokens would otherwise eat max_tokens).
+  const reasoningTuning = model.startsWith('openai/gpt-oss')
+    ? { reasoning_effort: 'low', include_reasoning: false }
+    : {};
 
   let upstream;
   try {
@@ -121,8 +136,9 @@ export const handler = async (event) => {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.4,
-        max_tokens: maxTokens,
+        temperature: 0.5, // GPT-OSS behaves best in the 0.5–0.7 band
+        max_completion_tokens: maxTokens, // current param name (max_tokens is legacy)
+        ...reasoningTuning,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user }
