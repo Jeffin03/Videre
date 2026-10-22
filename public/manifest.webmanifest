@@ -1,0 +1,27 @@
+{
+  "name": "Videre — Security Intuition Engine",
+  "short_name": "Videre",
+  "description": "An interactive security-literacy curriculum: discovery-first lessons, simulated DevTools, and role-focused learning paths for Foundations, GRC, SOC, and Bug Bounty.",
+  "id": "videre-app",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14161a",
+  "theme_color": "#14161a",
+  "categories": ["education", "utilities"],
+  "icons": [
+    {
+      "src": "./icons/videre.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/videre-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Videre — Security Intuition & Mental Model Platform",
+  "description": "An interactive learning environment closing the gap between security theory and practical intuition through discovery-first exploration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
