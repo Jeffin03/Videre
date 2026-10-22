@@ -3,7 +3,9 @@
 ## What this repo actually is
 
 A client-only Vite + React 19 + Tailwind v4 SPA: an interactive security-literacy curriculum ("Videre").
-Entry: `index.html` -> `src/main.tsx` -> `src/App.tsx`. No backend, no auth, no router.
+Entry: `index.html` -> `src/main.tsx` -> `src/App.tsx`. No auth, no router, no backend in local dev.
+The one server-side piece is an optional Netlify Function (`netlify/functions/ask.mjs`), an AI proxy
+that only exists on Netlify deploys — see the AI mentor section below.
 
 **The README's Stack / Getting Started / Contributing sections are aspirational, not current.**
 They describe Next.js, MDX lessons in `/content`, Supabase, and Vercel. None of that exists.
@@ -72,10 +74,20 @@ The real stack is the one in `package.json` + `vite.config.ts`; trust those over
   `src/main.tsx` (`import.meta.env.PROD`) so it never fights Vite HMR in dev.
 - **AI mentor ("Ask Videre")**: `src/components/AI/AskVidere.tsx` + `src/utils/groq.ts`
   (raw fetch to Groq's chat-completions API — no SDK, single-turn, `max_tokens` capped).
-  Key resolution: localStorage `videre_groq_config` (set via the panel) else the
-  `VITE_GROQ_API_KEY` / `VITE_GROQ_MODEL` env vars (must be `VITE_`-prefixed or Vite
-  hides them). The system prompt grounds answers in the current lesson and is built by
-  `buildSystemPrompt()` — it intentionally excludes challenge solutions.
+  `askGroq()` is **proxy-first**: it POSTs same-origin to `/.netlify/functions/ask`
+  (`netlify/functions/ask.mjs`, classic `handler` export, plain ESM JS) and only falls
+  back to a direct browser→Groq call when the proxy answers non-JSON (SPA hosts rewrite
+  unknown paths to index.html) or reports its server key missing (`kind: 'config'`).
+  The function keeps `GROQ_API_KEY` server-side (Netlify env var, NO `VITE_` prefix →
+  never bundled), enforces a per-IP rate limit (15/min, in-memory best-effort), payload
+  caps (user ≤1500 chars, system ≤6000, tokens ≤700) and a model-id pattern check, and
+  returns only `{ content }`. Local dev has no function (use `npx netlify-cli dev` to run
+  one, else the client falls back to direct mode). Direct mode key resolution: localStorage
+  `videre_groq_config` (set via the panel) else the `VITE_GROQ_API_KEY` / `VITE_GROQ_MODEL`
+  env vars (must be `VITE_`-prefixed or Vite hides them). No key is required in the panel
+  when the proxy is live; the panel only auto-opens on a `proxy-absent` error. The system
+  prompt grounds answers in the current lesson and is built by `buildSystemPrompt()` — it
+  intentionally excludes challenge solutions.
 
 ## State & persistence
 

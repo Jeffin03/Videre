@@ -12,6 +12,8 @@
 
 # SPA fallback: static files take precedence over this rewrite unless forced,
 # so /sw.js, /manifest.webmanifest and hashed assets keep serving normally.
+# Netlify routes /.netlify/functions/* (the AI proxy, ask.mjs) BEFORE redirect
+# rules, so this catch-all does not shadow the function.
 [[redirects]]
   from = "/*"
   to = "/index.html"

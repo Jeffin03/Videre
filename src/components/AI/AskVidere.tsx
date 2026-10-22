@@ -99,7 +99,10 @@ const SUGGESTIONS = [
 
 export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, track }) => {
   const [config, setConfig] = React.useState<GroqConfig>(loadConfig);
-  const [showConfig, setShowConfig] = React.useState<boolean>(() => !loadConfig().apiKey);
+  // Don't force the key panel open on mount: the site's AI proxy (Netlify
+  // Function) needs no client key at all. ask() opens it automatically only
+  // when there's genuinely no way to reach an AI (no proxy + no key).
+  const [showConfig, setShowConfig] = React.useState(false);
   const [apiKeyInput, setApiKeyInput] = React.useState('');
   const [modelInput, setModelInput] = React.useState('');
   const [question, setQuestion] = React.useState('');
@@ -111,9 +114,7 @@ export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, t
 
   React.useEffect(() => {
     if (!isOpen) return;
-    const current = loadConfig();
-    setConfig(current);
-    if (!current.apiKey) setShowConfig(true);
+    setConfig(loadConfig());
   }, [isOpen]);
 
   React.useEffect(() => () => abortRef.current?.abort(), []);
@@ -136,10 +137,10 @@ export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, t
   const ask = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
-    if (!config.apiKey) {
-      setShowConfig(true);
-      return;
-    }
+
+    // A key is NOT required when the site's AI proxy is active — askGroq
+    // tries the proxy first and only falls back to direct mode (which needs
+    // a stored/env key) when no proxy answers.
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -161,8 +162,11 @@ export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, t
       setAskCount((n) => n + 1);
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') return;
-      if (e instanceof GroqError) setError(e.message);
-      else setError('Something went wrong talking to Groq — try again.');
+      if (e instanceof GroqError) {
+        setError(e.message);
+        // Nothing to talk to at all → surface the one-time key setup.
+        if (e.kind === 'proxy-absent') setShowConfig(true);
+      } else setError('Something went wrong talking to Groq — try again.');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -223,7 +227,10 @@ export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, t
           {showConfig && (
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5 animate-in fade-in">
               <label className="block text-[10px] uppercase font-mono font-bold text-slate-500">
-                Groq API key <span className="text-slate-600 normal-case font-normal">— stored only in this browser</span>
+                Groq API key{' '}
+                <span className="text-slate-600 normal-case font-normal">
+                  — optional if this site's AI proxy is active · stored only in this browser
+                </span>
               </label>
               <div className="flex space-x-2">
                 <input
@@ -255,12 +262,12 @@ export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, t
               <div className="flex space-x-2 pt-0.5">
                 <button
                   onClick={persistAndCloseConfig}
-                  disabled={!apiKeyInput.trim() && !config.apiKey}
+                  disabled={!apiKeyInput.trim() && !config.apiKey && !modelInput.trim()}
                   className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-slate-100 font-bold rounded-lg text-xs transition"
                 >
-                  {config.apiKey ? 'Update' : 'Save key'}
+                  {config.apiKey || config.model ? 'Update' : 'Save'}
                 </button>
-                {config.apiKey && (
+                {(config.apiKey || config.model) && (
                   <button
                     onClick={() => setShowConfig(false)}
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition"
@@ -272,7 +279,8 @@ export const AskVidere: React.FC<AskVidereProps> = ({ isOpen, onClose, lesson, t
 
               <p className="text-[10px] text-slate-600 leading-relaxed">
                 Free key: console.groq.com/keys — or set <code className="text-cyan-400">VITE_GROQ_API_KEY</code> in{' '}
-                <code className="text-cyan-400">.env</code> at build time.
+                <code className="text-cyan-400">.env</code> at build time. With the site's AI proxy active, no key is
+                needed here at all.
               </p>
             </div>
           )}
